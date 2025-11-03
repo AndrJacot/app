@@ -1,0 +1,61 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Lint App
+      run: flake8 app/src  # Assume flake8 installed, or add setup-python
+    - name: Test App
+      run: pytest app/tests
+
+  docker-build-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build Docker (no push)
+      run: docker build -t app:temp app/
+    - name: Trivy Scan
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: app:temp
+        format: table
+        exit-code: 1
+        severity: CRITICAL,HIGH
+
+  terraform-checks:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: hashicorp/setup-terraform@v3
+    - run: terraform -chdir=infra/terraform fmt -check
+    - run: terraform -chdir=infra/terraform init -backend=false
+    - run: terraform -chdir=infra/terraform validate
+    - run: terraform -chdir=infra/terraform plan -out=plan.tfout
+
+  helm-checks:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Helm Lint
+      run: helm lint charts/app
+    - name: Helm Unit Tests
+      uses: helm-unittest/helm-unittest-action@main
+      with:
+        charts: charts/app
+
+  iac-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: bridgecrewio/checkov-action@master
+      with:
+        directory: infra/terraform
+        quiet: true
+        output_format: cli
+        check: HIGH  # Fail on high

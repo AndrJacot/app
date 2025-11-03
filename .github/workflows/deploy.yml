@@ -1,0 +1,101 @@
+name: Deploy to Main
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-push:
+    runs-on: [self-hosted, dind, arm64]  # Targets the local native runner on M1
+    steps:
+    - uses: actions/checkout@v4
+    - name: Auth to GCP
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: projects/<project-number>/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+        service_account: ${{ secrets.CI_SA_EMAIL }}  # Set in repo secrets
+    - name: Setup gcloud
+      uses: google-github-actions/setup-gcloud@v2
+    - name: Build & Push
+      env:
+        REGISTRY: ${{ secrets.REGISTRY_URL }}  # From terraform output, set in secrets
+      run: |
+        SHA=$(echo $GITHUB_SHA | cut -c1-7)
+        docker build -t $REGISTRY/app:$SHA -t $REGISTRY/app:main app/
+        docker push $REGISTRY/app:$SHA
+        docker push $REGISTRY/app:main
+    - name: SBOM
+      run: |
+        syft $REGISTRY/app:main > sbom.json
+        trivy sbom sbom.json
+      # Upload as artifact
+    - uses: actions/upload-artifact@v4
+      with:
+        name: sbom
+        path: sbom.json
+
+  terraform-apply:
+    runs-on: ubuntu-latest
+    needs: build-push
+    steps:
+    - uses: actions/checkout@v4
+    - uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: projects/<project-number>/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+        service_account: ${{ secrets.CI_SA_EMAIL }}
+    - uses: hashicorp/setup-terraform@v3
+    - run: terraform -chdir=infra/terraform init
+    - run: terraform -chdir=infra/terraform apply -auto-approve
+
+  deploy-dev:
+    runs-on: ubuntu-latest
+    needs: terraform-apply
+    steps:
+    - uses: actions/checkout@v4
+    - uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: projects/<project-number>/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+        service_account: ${{ secrets.CI_SA_EMAIL }}
+    - uses: google-github-actions/get-gke-credentials@v2
+      with:
+        cluster_name: ${{ secrets.CLUSTER_NAME }}
+        location: us-central1
+    - name: Deploy to Dev
+      run: helm upgrade --install app charts/app -f charts/app/values.dev.yaml
+    - name: Smoke Test
+      run: |
+        SVC_IP=$(kubectl get svc app -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        curl -f http://$SVC_IP/healthz || exit 1
+
+  promote-prod:
+    runs-on: ubuntu-latest
+    needs: deploy-dev
+    if: github.event_name == 'push'  # Manual approval
+    environment: production  # Requires approval in GitHub
+    steps:
+    - uses: actions/checkout@v4
+    - uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: projects/<project-number>/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+        service_account: ${{ secrets.CI_SA_EMAIL }}
+    - uses: google-github-actions/get-gke-credentials@v2
+      with:
+        cluster_name: ${{ secrets.CLUSTER_NAME }}
+        location: us-central1
+    - name: Deploy to Prod
+      run: helm upgrade --install app charts/app -f charts/app/values.prod.yaml
+    - name: Smoke Test Prod
+      run: |
+        SVC_IP=$(kubectl get svc app -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$SVC_IP/healthz)
+        if [ $STATUS -ne 200 ]; then
+          helm rollback app
+          exit 1
+        fi
+    - name: Deployment Summary
+      run: echo "Deployed image: main, chart: 0.1.0" >> $GITHUB_STEP_SUMMARY
+
