@@ -30,11 +30,15 @@ jobs:
         run: |
           brew install syft trivy
       - name: SBOM
-        run: syft ${{ secrets.REGISTRY_URL }}/app:main > sbom.json; trivy sbom sbom.json
+        run: |
+          syft ${{ env.REGISTRY }}/app:main -o cyclonedx-json > sbom.json
+          trivy sbom sbom.json --format json -o trivy-report.json --exit-code 0
       - uses: actions/upload-artifact@v4
         with:
           name: sbom
-          path: sbom.json
+          path: |
+            sbom.json
+            trivy-report.json
           
   terraform-apply:
     runs-on: self-hosted
