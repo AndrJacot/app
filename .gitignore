@@ -206,7 +206,7 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-infra/terraform/.terraform*
+infra/terraform/.terraform/*
 infra/.DS_Store
 infra/ansible/.DS_Store
 charts/.DS_Store
