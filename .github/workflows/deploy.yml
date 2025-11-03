@@ -28,15 +28,9 @@ jobs:
         run: SHA=$(echo $GITHUB_SHA | cut -c1-7); docker build -t $REGISTRY/app:$SHA -t $REGISTRY/app:main app/; docker push $REGISTRY/app:$SHA; docker push $REGISTRY/app:main
       - name: Install Syft and Trivy
         run: |
-          # Install Homebrew if missing (idempotent)
-          if ! command -v brew &> /dev/null; then
-            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-            echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zshrc  # Adjust shell if not zsh
-            eval "$(/opt/homebrew/bin/brew shellenv)"
-          fi
           brew install syft trivy
       - name: SBOM
-        run: syft $REGISTRY/app:main > sbom.json; trivy sbom sbom.json
+        run: syft ${{ secrets.REGISTRY_URL }}/app:main > sbom.json; trivy sbom sbom.json
       - uses: actions/upload-artifact@v4
         with:
           name: sbom
