@@ -82,6 +82,6 @@ jobs:
     - name: Smoke Test Prod
       run: SVC_IP=$(kubectl get svc app -o jsonpath='{.status.loadBalancer.ingress[0].ip}'); STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$SVC_IP/healthz); if [ $STATUS -ne 200 ]; then helm rollback app; exit 1; fi
     - name: Deployment Summary
-      run: echo "Deployed image: main, chart: 0.1.0" >> $GITHUB_STEP_SUMMARY
+      run: 'echo "Deployed image: main, chart: 0.1.0" >> $GITHUB_STEP_SUMMARY'
 
       
