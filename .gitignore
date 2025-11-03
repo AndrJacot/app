@@ -211,3 +211,6 @@ infra/.DS_Store
 infra/ansible/.DS_Store
 charts/.DS_Store
 .DS_Store
+infra/terraform/.terraform.lock.hcl
+infra/terraform/terraform.tfstate
+infra/terraform/terraform.tfstate.backup
