@@ -1,0 +1,17 @@
+replicas: 1
+image:
+  repository: <your-artifact-registry>/app
+  tag: main
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+hpa:
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPU: 50
+sysEnv: helloworld  # Base64 encoded in template
+
