@@ -1,0 +1,40 @@
+---
+- name: Install Docker
+  apt:
+    name: docker.io
+    state: present
+  become: yes
+
+- name: Start Docker
+  service:
+    name: docker
+    state: started
+  become: yes
+
+- name: Install GitHub Runner
+  shell: |
+    mkdir actions-runner && cd actions-runner
+    curl -o actions-runner-linux-x64-2.317.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.317.0/actions-runner-linux-x64-2.317.0.tar.gz
+    tar xzf ./actions-runner-linux-x64-2.317.0.tar.gz
+  args:
+    creates: actions-runner/run.sh
+
+- name: Configure Runner with DinD
+  shell: |
+    cd actions-runner
+    ./config.sh --url https://github.com/{{ github_repo }} --token {{ github_token }} --name local-dind --labels dind --unattended
+  args:
+    creates: actions-runner/.runner
+
+- name: Start Runner
+  shell: cd actions-runner && ./run.sh --once
+  async: 3600
+  poll: 0
+
+- name: Setup DinD in Runner
+  copy:
+    content: |
+      docker run -d --privileged --name dind -p 2375:2375 docker:dind
+    dest: actions-runner/dind-start.sh
+    mode: 0755
+

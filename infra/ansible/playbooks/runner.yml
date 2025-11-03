@@ -1,0 +1,45 @@
+---
+- hosts: local
+  vars:
+    runner_dir: "{{ ansible_env.HOME }}/actions-runner"
+    version: "2.329.0"
+    tar_file: "actions-runner-osx-arm64-{{ version }}.tar.gz"
+    download_url: "https://github.com/actions/runner/releases/download/v{{ version }}/{{ tar_file }}"
+    expected_hash: "50c0d409040cc52e701ac1d5afb4672cb7803a65c1292a30e96c42051dfa690f"
+  tasks:
+    - name: Create runner directory
+      ansible.builtin.file:
+        path: "{{ runner_dir }}"
+        state: directory
+
+    - name: Download runner package
+      ansible.builtin.get_url:
+        url: "{{ download_url }}"
+        dest: "{{ runner_dir }}/{{ tar_file }}"
+        mode: '0644'
+
+    - name: Validate hash
+      ansible.builtin.command: shasum -a 256 -c -
+      args:
+        stdin: "{{ expected_hash }}  {{ tar_file }}"
+        chdir: "{{ runner_dir }}"
+      register: hash_check
+      failed_when: hash_check.rc != 0
+
+    - name: Extract runner
+      ansible.builtin.command: tar xzf {{ tar_file }}
+      args:
+        chdir: "{{ runner_dir }}"
+
+    - name: Configure runner
+      ansible.builtin.command: ./config.sh --url https://github.com/{{ github_repo }} --token {{ github_token }} --name local-dind --labels dind,test --unattended --replace
+      args:
+        chdir: "{{ runner_dir }}"
+
+    - name: Start runner (run in background)
+      ansible.builtin.command: nohup ./run.sh &
+      args:
+        chdir: "{{ runner_dir }}"
+      async: 3600
+      poll: 0
+
