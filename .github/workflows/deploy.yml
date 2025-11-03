@@ -20,6 +20,8 @@ jobs:
         service_account: ${{ secrets.CI_SA_EMAIL }}
     - name: Setup gcloud
       uses: google-github-actions/setup-gcloud@v2
+    - name: Configure Docker for Artifact Registry
+      run: gcloud auth configure-docker us-central1-docker.pkg.dev  # Enables Docker to use OIDC creds for regional AR
     - name: Build & Push
       env:
         REGISTRY: ${{ secrets.REGISTRY_URL }}
@@ -57,6 +59,8 @@ jobs:
       with:
         cluster_name: ${{ secrets.CLUSTER_NAME }}
         location: us-central1
+    - name: Install Helm (if needed on runner)
+      run: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
     - name: Deploy to Dev
       run: helm upgrade --install app charts/app -f charts/app/values.dev.yaml
     - name: Smoke Test
@@ -65,7 +69,7 @@ jobs:
   promote-prod:
     runs-on: self-hosted
     needs: deploy-dev
-    if: github.event_name == 'push'  # Manual approval
+    if: github.event_name == 'push'
     environment: production
     steps:
     - uses: actions/checkout@v4
@@ -77,11 +81,11 @@ jobs:
       with:
         cluster_name: ${{ secrets.CLUSTER_NAME }}
         location: us-central1
+    - name: Install Helm (if needed)
+      run: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
     - name: Deploy to Prod
       run: helm upgrade --install app charts/app -f charts/app/values.prod.yaml
     - name: Smoke Test Prod
       run: SVC_IP=$(kubectl get svc app -o jsonpath='{.status.loadBalancer.ingress[0].ip}'); STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$SVC_IP/healthz); if [ $STATUS -ne 200 ]; then helm rollback app; exit 1; fi
     - name: Deployment Summary
       run: 'echo "Deployed image: main, chart: 0.1.0" >> $GITHUB_STEP_SUMMARY'
-
-      
