@@ -13,5 +13,4 @@ hpa:
   minReplicas: 1
   maxReplicas: 3
   targetCPU: 50
-sysEnv: helloworld  # Base64 encoded in template
-
+sysEnv: helloworld
