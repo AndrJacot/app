@@ -71,7 +71,7 @@ jobs:
     - name: Deploy to Dev
       run: helm upgrade --install app charts/app -f charts/app/values.dev.yaml
     - name: Smoke Test
-      run: SVC_IP=$(kubectl get svc app -o jsonpath='{.status.loadBalancer.ingress[0].ip}'); curl -f http://$SVC_IP/healthz || exit 1
+      run: SVC_IP=$(kubectl get ingress app -n default -o jsonpath='{.status.loadBalancer.ingress[0].ip}'); curl -f http://$SVC_IP/healthz || exit 1
 
   promote-prod:
     runs-on: self-hosted
@@ -93,6 +93,6 @@ jobs:
     - name: Deploy to Prod
       run: helm upgrade --install app charts/app -f charts/app/values.prod.yaml
     - name: Smoke Test Prod
-      run: SVC_IP=$(kubectl get svc app -o jsonpath='{.status.loadBalancer.ingress[0].ip}'); STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$SVC_IP/healthz); if [ $STATUS -ne 200 ]; then helm rollback app; exit 1; fi
+      run: SVC_IP=$(kubectl get ingress app -n default -o jsonpath='{.status.loadBalancer.ingress[0].ip}'); STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$SVC_IP/healthz); if [ $STATUS -ne 200 ]; then helm rollback app; exit 1; fi
     - name: Deployment Summary
       run: 'echo "Deployed image: main, chart: 0.1.0" >> $GITHUB_STEP_SUMMARY'
