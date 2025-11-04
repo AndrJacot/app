@@ -70,6 +70,10 @@ jobs:
       run: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
     - name: Deploy to Dev
       run: helm upgrade --install app charts/app -f charts/app/values.dev.yaml
+    - name: Smoke Test
+      run: |
+        SVC_IP=$(gcloud container clusters get-credentials app-cluster --region us-central1 --project chalenge-2025  && kubectl get svc app -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        curl -f http://$SVC_IP/healthz || exit 1
   
   promote-prod:
     runs-on: self-hosted
