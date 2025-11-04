@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-push:
-    runs-on: [ self-hosted, dind, arm64 ]
+    runs-on: [self-hosted, dind, arm64]
     steps:
       - uses: actions/checkout@v4
       - name: Auth to GCP
@@ -31,7 +31,7 @@ jobs:
           brew install syft trivy
       - name: SBOM
         run: |
-          syft ${{ secrets.REGISTRY_URL }}/app:main -o cyclonedx-json > sbom.json
+          syft $REGISTRY/app:main -o cyclonedx-json > sbom.json
           trivy sbom sbom.json --format json -o trivy-report.json --exit-code 0
       - uses: actions/upload-artifact@v4
         with:
@@ -69,12 +69,30 @@ jobs:
     - name: Install Helm (if needed on runner)
       run: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
     - name: Deploy to Dev
-      run: helm upgrade --install app charts/app -f charts/app/values.dev.yaml
+      run: helm upgrade --install app charts/app -f charts/app/values.dev.yaml --namespace default --create-namespace
     - name: Smoke Test
       run: |
-        SVC_IP=$(gcloud container clusters get-credentials app-cluster --region us-central1 --project chalenge-2025  && kubectl get svc app -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        for i in {1..10}; do
+          SVC_IP=$(kubectl get ingress app -n default -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          if [ -n "$SVC_IP" ] && [ "$SVC_IP" != "null" ]; then
+            echo "Ingress IP ready: $SVC_IP"
+            break
+          fi
+          echo "Waiting for Ingress IP... ($i/10)"
+          sleep 30
+        done
+        if [ -z "$SVC_IP" ] || [ "$SVC_IP" = "null" ]; then
+          echo "Ingress IP not ready; falling back to port-forward"
+          kubectl port-forward svc/app -n default 8080:80 &
+          PORT_FORWARD_PID=$!
+          sleep 10
+          curl -f http://localhost:8080/healthz || (kill $PORT_FORWARD_PID; exit 1)
+          kill $PORT_FORWARD_PID
+          exit 0
+        fi
         curl -f http://$SVC_IP/healthz || exit 1
-  
+        echo "Dev smoke test passed: 200 on /healthz"
+
   promote-prod:
     runs-on: self-hosted
     needs: deploy-dev
@@ -93,6 +111,37 @@ jobs:
     - name: Install Helm (if needed)
       run: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
     - name: Deploy to Prod
-      run: helm upgrade --install app charts/app -f charts/app/values.prod.yaml
+      run: helm upgrade --install app charts/app -f charts/app/values.prod.yaml --namespace default --create-namespace
+    - name: Smoke Test Prod
+      run: |
+        for i in {1..10}; do
+          SVC_IP=$(kubectl get ingress app -n default -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          if [ -n "$SVC_IP" ] && [ "$SVC_IP" != "null" ]; then
+            echo "Ingress IP ready: $SVC_IP"
+            break
+          fi
+          echo "Waiting for Ingress IP... ($i/10)"
+          sleep 30
+        done
+        if [ -z "$SVC_IP" ] || [ "$SVC_IP" = "null" ]; then
+          echo "Ingress IP not ready; falling back to port-forward"
+          kubectl port-forward svc/app -n default 8080:80 &
+          PORT_FORWARD_PID=$!
+          sleep 10
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/healthz)
+          if [ $STATUS -ne 200 ]; then
+            kill $PORT_FORWARD_PID
+            helm rollback app -n default
+            exit 1
+          fi
+          kill $PORT_FORWARD_PID
+          exit 0
+        fi
+        STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$SVC_IP/healthz)
+        if [ $STATUS -ne 200 ]; then
+          helm rollback app -n default
+          exit 1
+        fi
+        echo "Prod smoke test passed: 200 on /healthz"
     - name: Deployment Summary
       run: 'echo "Deployed image: main, chart: 0.1.0" >> $GITHUB_STEP_SUMMARY'
