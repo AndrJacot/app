@@ -31,7 +31,7 @@ jobs:
           brew install syft trivy
       - name: SBOM
         run: |
-          syft $REGISTRY/app:main -o cyclonedx-json > sbom.json
+          syft ${{ secrets.REGISTRY_URL }}/app:main -o cyclonedx-json > sbom.json
           trivy sbom sbom.json --format json -o trivy-report.json --exit-code 0
       - uses: actions/upload-artifact@v4
         with:
