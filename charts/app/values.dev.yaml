@@ -1,6 +1,6 @@
 replicas: 1
 image:
-  repository: <your-artifact-registry>/app
+  repository: us-central1-docker.pkg.dev/chalenge-2025/app-repo/app
   tag: main
 resources:
   requests:
