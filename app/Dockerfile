@@ -13,5 +13,4 @@ COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/pytho
 ENV SYS_ENV=helloworld
 USER 1000 
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s CMD curl -f http://localhost:8080/healthz || exit 1
 CMD ["python", "-m", "src.main"]
