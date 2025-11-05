@@ -70,7 +70,7 @@ jobs:
     - uses: google-github-actions/get-gke-credentials@v2
       with:
         cluster_name: ${{ secrets.CLUSTER_NAME }}
-        location: us-central1
+        location: ${{ secrets.CLUSTER_LOCATION }}
     - name: Install Helm (if needed on runner)
       run: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
     - name: Deploy to Dev
@@ -116,16 +116,16 @@ jobs:
     - uses: google-github-actions/get-gke-credentials@v2
       with:
         cluster_name: ${{ secrets.CLUSTER_NAME }}
-        location: us-central1
+        location: ${{ secrets.CLUSTER_LOCATION }}
     - name: Install Helm (if needed)
       run: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
     - name: Deploy to Prod
-      run: helm upgrade --install app charts/app -f charts/app/values.prod.yaml --set image.tag=${{env.SHA}} --namespace default --create-namespace
+      run: helm upgrade --install app charts/app -f charts/app/values.prod.yaml --set image.tag=${{env.SHA}} --namespace ${{ secrets.PROD_NS }} --create-namespace
     - name: Smoke Test Prod
       run: |
         sleep 30
         for i in {1..10}; do
-          SVC_IP=$(kubectl get ingress app -n default -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          SVC_IP=$(kubectl get ingress app -n ${{ secrets.PROD_NS }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
           if [ -n "$SVC_IP" ] && [ "$SVC_IP" != "null" ]; then
             echo "Ingress IP ready: $SVC_IP"
             break
@@ -135,13 +135,13 @@ jobs:
         done
         if [ -z "$SVC_IP" ] || [ "$SVC_IP" = "null" ]; then
           echo "Ingress IP not ready; falling back to port-forward"
-          kubectl port-forward svc/app -n default 8080:80 &
+          kubectl port-forward svc/app -n ${{ secrets.PROD_NS }} 8080:80 &
           PORT_FORWARD_PID=$!
           sleep 10
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/healthz)
           if [ $STATUS -ne 200 ]; then
             kill $PORT_FORWARD_PID
-            helm rollback app -n default
+            helm rollback app -n ${{ secrets.PROD_NS }}
             exit 1
           fi
           kill $PORT_FORWARD_PID
@@ -149,7 +149,7 @@ jobs:
         fi
         STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$SVC_IP/healthz)
         if [ $STATUS -ne 200 ]; then
-          helm rollback app -n default
+          helm rollback app -n ${{ secrets.PROD_NS }}
           exit 1
         fi
         echo "Prod smoke test passed: 200 on /healthz"
