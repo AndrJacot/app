@@ -77,6 +77,7 @@ jobs:
       run: helm upgrade --install app charts/app -f charts/app/values.dev.yaml --set image.tag=${{env.SHA}} --namespace default --create-namespace
     - name: Smoke Test
       run: |
+        sleep 30
         for i in {1..10}; do
           SVC_IP=$(kubectl get ingress app -n default -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
           if [ -n "$SVC_IP" ] && [ "$SVC_IP" != "null" ]; then
@@ -122,6 +123,7 @@ jobs:
       run: helm upgrade --install app charts/app -f charts/app/values.prod.yaml --set image.tag=${{env.SHA}} --namespace default --create-namespace
     - name: Smoke Test Prod
       run: |
+        sleep 30
         for i in {1..10}; do
           SVC_IP=$(kubectl get ingress app -n default -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
           if [ -n "$SVC_IP" ] && [ "$SVC_IP" != "null" ]; then
