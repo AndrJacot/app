@@ -25,7 +25,7 @@ jobs:
       - name: Build & Push
         env:
           REGISTRY: ${{ secrets.REGISTRY_URL }}
-        run: SHA=$(echo $GITHUB_SHA | cut -c1-7); docker buildx build --no-cache --platform linux/amd64,linux/arm64 -t $REGISTRY/app:$SHA -t $REGISTRY/app:main app/; docker push $REGISTRY/app:$SHA; docker push $REGISTRY/app:main
+        run: SHA=$(echo $GITHUB_SHA | cut -c1-8); docker buildx build --no-cache --platform linux/amd64 -t $REGISTRY/app:$SHA -t $REGISTRY/app:main app/; docker push $REGISTRY/app:$SHA; docker push $REGISTRY/app:main
       - name: Install Syft and Trivy
         run: |
           brew install syft trivy
@@ -58,6 +58,11 @@ jobs:
     needs: terraform-apply
     steps:
     - uses: actions/checkout@v4
+    - name: short-sha
+      uses: benjlevesque/short-sha@v3.0
+      id: short-sha
+      with:
+        length: 8
     - uses: google-github-actions/auth@v2
       with:
         workload_identity_provider: projects/${{ secrets.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider
@@ -69,7 +74,7 @@ jobs:
     - name: Install Helm (if needed on runner)
       run: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
     - name: Deploy to Dev
-      run: helm upgrade --install app charts/app -f charts/app/values.dev.yaml --set image.tag=$SHA --namespace default --create-namespace
+      run: helm upgrade --install app charts/app -f charts/app/values.dev.yaml --set image.tag=${{env.SHA}} --namespace default --create-namespace
     - name: Smoke Test
       run: |
         for i in {1..10}; do
@@ -111,7 +116,7 @@ jobs:
     - name: Install Helm (if needed)
       run: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
     - name: Deploy to Prod
-      run: helm upgrade --install app charts/app -f charts/app/values.prod.yaml --set image.tag=$SHA --namespace default --create-namespace
+      run: helm upgrade --install app charts/app -f charts/app/values.prod.yaml --set image.tag=${{env.SHA}} --namespace default --create-namespace
     - name: Smoke Test Prod
       run: |
         for i in {1..10}; do
