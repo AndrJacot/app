@@ -2,16 +2,8 @@ replicas: 2
 image:
   repository: us-central1-docker.pkg.dev/chalenge-2025/app-repo/app
   tag: main
-resources:
-  requests:
-    cpu: 20m
-    memory: 128Mi
-  limits:
-    cpu: 50m
-    memory: 256Mi
 hpa:
   minReplicas: 2
   maxReplicas: 4
   targetCPU: 80
 sysEnv: helloworld
-
